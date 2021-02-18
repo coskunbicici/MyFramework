@@ -1,10 +1,14 @@
 ﻿using Business.Abstract;
 using Business.Constants;
+using Business.ValidationRules.FluentValidation;
+using Core.Aspects.Autofac.Validation;
+using Core.CrossCuttingConcerns.Validation;
 using Core.Utilities.Results;
 using DataAccess.Abstract;
 using DataAccess.Concrete.InMemory;
 using Entities.Concrete;
 using Entities.DTOs;
+using FluentValidation;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -20,14 +24,27 @@ namespace Business.Concrete
             _productDal = productDal;
         }
 
+        [ValidationAspect(typeof(ProductValidator))]
         public IResult Add(Product product)
         {
-            //business codes
+            //business codes : örn. kredi uygulamasında kişinin kredi almaya uygun olup olmadığının kontrolünün yapılması
+            // ehliyet uygulamasında kişinin trafik, motor, ilk yardım sınavından 70 alıp ehliyet almaya hak kazanması gibi 
+            // karar kontrol işlemleri kodlanır
+            //validation : doğrulama (verinin yapısal olarak doğru olup olmadığı kontrolü)
+            // ikisi birbirinden ayrı olmalı
 
-            if (product.ProductName.Length < 2)
-            {
-                return new ErrorResult(Messages.ProductNameInvalid);
-            }
+            //// ----- Fluent Validation implementation (Kötü Kod) -----
+            //var context = new ValidationContext<Product>(product);
+            //ProductValidator productValidator = new ProductValidator();
+            //var result = productValidator.Validate(context);
+            //if (!result.IsValid)
+            //{
+            //    throw new ValidationException(result.Errors);
+            //}
+            //// ----- Fluent Validation implementation (Kötü Kod) -----
+
+            //ValidationTool.Validate(new ProductValidator(), product);
+
             _productDal.Add(product);
 
             return new SuccessResult(Messages.ProductAdded);
