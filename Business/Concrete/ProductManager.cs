@@ -1,8 +1,10 @@
 ﻿using Business.Abstract;
+using Business.BusinessAspects.Autofac;
 using Business.Constants;
 using Business.ValidationRules.FluentValidation;
 using Core.Aspects.Autofac.Validation;
 using Core.CrossCuttingConcerns.Validation;
+using Core.Utilities.Business;
 using Core.Utilities.Results;
 using DataAccess.Abstract;
 using DataAccess.Concrete.InMemory;
@@ -11,6 +13,7 @@ using Entities.DTOs;
 using FluentValidation;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Business.Concrete
@@ -18,12 +21,16 @@ namespace Business.Concrete
     public class ProductManager : IProductService
     {
         IProductDal _productDal;
+        ICategoryService _categoryService;
 
-        public ProductManager(IProductDal productDal)
+        public ProductManager(IProductDal productDal, ICategoryService categoryService)
         {
             _productDal = productDal;
+            _categoryService = categoryService;
+
         }
 
+        [SecuredOperation("product.add,admin")]
         [ValidationAspect(typeof(ProductValidator))]
         public IResult Add(Product product)
         {
@@ -42,19 +49,36 @@ namespace Business.Concrete
             //    throw new ValidationException(result.Errors);
             //}
             //// ----- Fluent Validation implementation (Kötü Kod) -----
-
             //ValidationTool.Validate(new ProductValidator(), product);
 
-            _productDal.Add(product);
+            // İş kuralı: Bir kategoride en fazla 10 ürün olabilir
+            // İş kuralı: Aynı isimde ürün eklenemez
+            // İş kuralı: Kategori sayısı 15'i geçmişse ürün eklenemez
+            IResult result = BusinessRules.Run(CheckIfProductCountOfCategoryCorrect(product.CategoryId),
+                CheckIfProductNameNotExistCorrect(product.ProductName),
+                CheckIfCategoryLimitExceded());
+            if (result != null)
+            {
+                return result;
+            }
 
+            _productDal.Add(product);
             return new SuccessResult(Messages.ProductAdded);
+
+        }
+
+        
+        [ValidationAspect(typeof(ProductValidator))]
+        public IResult Update(Product product)
+        {
+            throw new NotImplementedException();
         }
 
         public IDataResult<List<Product>> GetAll()
         {
             //İş kodları
             //Yetkisi var mı?
-            if (DateTime.Now.Hour == 22)
+            if (DateTime.Now.Hour == 2)
             {
                 return new ErrorDataResult<List<Product>>(Messages.MaintenanceTime);
             }
@@ -84,5 +108,38 @@ namespace Business.Concrete
             }
             return new SuccessDataResult<List<ProductDetailDto>>(_productDal.GetProductDetails());
         }
+
+        // İş kuralı parçacığı farklı yerlerde kullanmayacağız
+        // Zaten farklı yerlerde kullanılması gereken birşeyse onu ProductService'te yazmamız gerekir
+        private IResult CheckIfProductCountOfCategoryCorrect(int categoryId)
+        {
+            var result = _productDal.GetAll(f => f.CategoryId == categoryId).Count;
+            if (result >= 100)
+            {
+                return new ErrorResult(Messages.ProductCountOfCategoryError);
+            }
+            return new SuccessResult();
+        }
+
+        private IResult CheckIfProductNameNotExistCorrect(string productName)
+        {
+            var result = _productDal.GetAll(f => f.ProductName == productName).Any();
+            if (result)
+            {
+                return new ErrorResult(Messages.ProductNameExistsError);
+            }
+            return new SuccessResult();
+        }
+
+        private IResult CheckIfCategoryLimitExceded()
+        {
+            var result = _categoryService.GetAll();
+            if (result.Data.Count > 15)
+            {
+                return new ErrorResult(Messages.CategoryLimitExceeded);
+            }
+            return new SuccessResult();
+        }
+
     }
 }
